@@ -62,6 +62,14 @@ function createServer(): McpServer {
           uri: "ui://prototype/viewer",
           mimeType: RESOURCE_MIME_TYPE,
           text: getPrototypeHtml(),
+          _meta: {
+            ui: {
+              csp: {
+                resourceDomains: ["https://www.figma.com"],
+                connectDomains: ["https://www.figma.com"],
+              },
+            },
+          },
         },
       ],
     })
