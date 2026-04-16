@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prototype Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0e0e0e;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: 100%;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 16px;
+      background: #1a1a1a;
+      border-bottom: 1px solid #2a2a2a;
+      min-height: 44px;
+      flex-shrink: 0;
+    }
+
+    .toolbar-title {
+      color: #e0e0e0;
+      font-size: 13px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toolbar-title svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.6;
+    }
+
+    .toolbar-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .toolbar-btn {
+      background: #2a2a2a;
+      border: 1px solid #3a3a3a;
+      color: #ccc;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: background 0.15s;
+    }
+
+    .toolbar-btn:hover {
+      background: #333;
+    }
+
+    .prototype-frame {
+      flex: 1;
+      width: 100%;
+      border: none;
+    }
+
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      color: #888;
+      font-size: 14px;
+    }
+
+    .loading.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="toolbar">
+      <div class="toolbar-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+          <line x1="8" y1="21" x2="16" y2="21"></line>
+          <line x1="12" y1="17" x2="12" y2="21"></line>
+        </svg>
+        <span id="title">Prototype</span>
+      </div>
+      <div class="toolbar-actions">
+        <button class="toolbar-btn" id="btn-fullscreen" title="Fullscreen">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <polyline points="9 21 3 21 3 15"></polyline>
+            <line x1="21" y1="3" x2="14" y2="10"></line>
+            <line x1="3" y1="21" x2="10" y2="14"></line>
+          </svg>
+        </button>
+        <button class="toolbar-btn" id="btn-open" title="Open in Figma">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+          Figma
+        </button>
+      </div>
+    </div>
+    <div class="loading" id="loading">Loading prototype...</div>
+    <iframe class="prototype-frame" id="prototype" style="display:none" allowfullscreen></iframe>
+  </div>
+
+  <script>
+    class App {
+      constructor() {
+        this.prototypeUrl = null;
+        this.title = "Prototype";
+        this.connected = false;
+
+        this.iframe = document.getElementById("prototype");
+        this.loading = document.getElementById("loading");
+        this.titleEl = document.getElementById("title");
+
+        document.getElementById("btn-fullscreen").addEventListener("click", () => this.toggleFullscreen());
+        document.getElementById("btn-open").addEventListener("click", () => this.openInFigma());
+
+        this.iframe.addEventListener("load", () => {
+          this.loading.classList.add("hidden");
+          this.iframe.style.display = "block";
+        });
+
+        window.addEventListener("message", (e) => this.handleMessage(e));
+        this.connect();
+      }
+
+      connect() {
+        // Try to read initial data from data attribute (server-injected)
+        const container = document.querySelector(".container");
+        if (container && container.dataset.config) {
+          try {
+            const config = JSON.parse(container.dataset.config);
+            this.applyConfig(config);
+            return;
+          } catch {}
+        }
+
+        // Try window-level config (script-injected)
+        if (window.PROTOTYPE_CONFIG) {
+          this.applyConfig(window.PROTOTYPE_CONFIG);
+          return;
+        }
+
+        // Signal to MCP host that we're ready
+        if (window.parent !== window) {
+          window.parent.postMessage({ type: "appReady" }, "*");
+        }
+      }
+
+      handleMessage(event) {
+        const data = event.data;
+        if (!data || typeof data !== "object") return;
+
+        // Handle various MCP host message formats
+        if (data.type === "renderData" && data.data) {
+          this.applyConfig(data.data);
+        } else if (data.type === "init" && data.config) {
+          this.applyConfig(data.config);
+        } else if (data.type === "initialData") {
+          this.applyConfig(data);
+        } else if (data.prototypeUrl) {
+          this.applyConfig(data);
+        }
+
+        // JSON-RPC responses from host
+        if (data.jsonrpc === "2.0" && data.result) {
+          // Handle tool call responses if needed
+        }
+      }
+
+      applyConfig(config) {
+        if (config.prototypeUrl) {
+          this.prototypeUrl = config.prototypeUrl;
+          // Convert prototype URL to embed URL
+          const embedUrl = this.toEmbedUrl(config.prototypeUrl);
+          this.iframe.src = embedUrl;
+        }
+        if (config.title) {
+          this.title = config.title;
+          this.titleEl.textContent = config.title;
+        }
+      }
+
+      toEmbedUrl(url) {
+        // If already an embed URL, use as-is
+        if (url.includes("/embed")) return url;
+        // Convert figma.com/proto/... to embed format
+        return `https://www.figma.com/embed?embed_host=share&url=${encodeURIComponent(url)}`;
+      }
+
+      toggleFullscreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen();
+        }
+      }
+
+      openInFigma() {
+        if (this.prototypeUrl) {
+          window.open(this.prototypeUrl, "_blank");
+        }
+      }
+    }
+
+    const app = new App();
+  </script>
+</body>
+</html>
