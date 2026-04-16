@@ -16,9 +16,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const DEFAULT_PROTOTYPE_URL =
-  "https://www.figma.com/proto/bJ4WPEhoUMx2cL1lyFClzF/Langdock-whiteboard?node-id=832-61&t=UGnMPhoDCAGAwaPm-1";
-
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
 // Cache the HTML template
@@ -82,13 +79,12 @@ function createServer(): McpServer {
     {
       title: "Show Prototype",
       description:
-        "Display a Figma prototype in an interactive iframe viewer. Defaults to the standup presentation if no URL is provided.",
+        "Display a Figma prototype in an interactive iframe viewer.",
       inputSchema: {
         prototypeUrl: z
           .string()
           .url()
-          .optional()
-          .describe("Figma prototype URL. Defaults to the standup deck."),
+          .describe("Figma prototype URL to display."),
         title: z
           .string()
           .optional()
@@ -98,11 +94,10 @@ function createServer(): McpServer {
         ui: { resourceUri: "ui://prototype/viewer" },
       },
     },
-    async ({ prototypeUrl, title }: { prototypeUrl?: string; title?: string }) => {
-      const url = prototypeUrl || DEFAULT_PROTOTYPE_URL;
-      const displayTitle = title || "Standup Presentation";
+    async ({ prototypeUrl, title }: { prototypeUrl: string; title?: string }) => {
+      const displayTitle = title || "Prototype";
 
-      const config = { prototypeUrl: url, title: displayTitle };
+      const config = { prototypeUrl, title: displayTitle };
 
       // Inject config into the HTML template
       let html = getPrototypeHtml();
